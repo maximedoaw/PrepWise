@@ -8,10 +8,14 @@ import Image from "next/image"
 import Link from "next/link"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth"
+import { auth } from "@/firebase/client"
+import { SignIn, SignUp } from "@/lib/actions/auth.action"
 
 type FormType = "sign-in" | "sign-up"
 
 interface SignInFormValues {
+  name?: string
   email: string
   password: string
 }
@@ -58,7 +62,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
     return errors
   }
 
-  const onSubmit = async (values: SignInFormValues | SignUpFormValues) => {
+  const onSubmit = async (values: SignUpFormValues | SignInFormValues) => {
     try {
       const errors = validateForm(values)
 
@@ -72,13 +76,47 @@ const AuthForm = ({ type }: { type: FormType }) => {
         return
       }
 
-      if (isSignIn) {
-        console.log("Sign in:", values)
-        // await signIn(values);
+      
+      if (type === "sign-up") {
+        const { name, email, password } = values;
+
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          email,
+          password
+        );
+
+        const result = await SignUp({
+          uid: userCredential.user.uid,
+          name: name!,
+          email,
+          password,
+        });
+
+        if (!result?.success) {
+          toast.error(result?.message);
+          return;
+        }
+
+        toast.success("Account created successfully. Please sign in.");
+        router.push("/sign-in");
       } else {
-        console.log("Sign up:", values)
+        const {email, password} = values
+        const userCredentials = await signInWithEmailAndPassword(auth ,email, password)
+
+        const idToken = await userCredentials.user.getIdToken()
+
+        if(!idToken){
+          toast.error("Failed to sign in")
+          return
+        }
+
+        toast.success("Successfully signed in")
+
+        await SignIn({email, idToken})
+        router.push("/")
       }
-      toast.success(`${isSignIn ? "Successfully signed in" : "Successfully account created"}`)
+
       router.push("/")
     } catch (error) {
       console.error(error)
